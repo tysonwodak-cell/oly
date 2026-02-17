@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Winter Olympics Medal Table</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #0f172a;
+      --card: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --accent-2: #fbbf24;
+      --border: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(96,165,250,0.1), transparent 25%), radial-gradient(circle at 80% 10%, rgba(251,191,36,0.12), transparent 22%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+    .panel {
+      width: min(1100px, 100%);
+      background: linear-gradient(135deg, rgba(17,24,39,0.92), rgba(12,18,30,0.95));
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: 0 25px 70px rgba(0,0,0,0.35);
+      padding: 28px 28px 18px;
+      backdrop-filter: blur(6px);
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      letter-spacing: 0.5px;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 0.92rem;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(96,165,250,0.12);
+      color: #c5dcff;
+      border: 1px solid rgba(96,165,250,0.35);
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.15px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 14px;
+    }
+    thead {
+      background: rgba(255,255,255,0.04);
+    }
+    th, td {
+      padding: 12px 10px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    th:first-child, td:first-child { text-align: left; width: 54px; }
+    th:nth-child(2), td:nth-child(2) { text-align: left; }
+    tbody tr:nth-child(odd) { background: rgba(255,255,255,0.02); }
+    tbody tr:hover { background: rgba(96,165,250,0.08); }
+    .country {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .code {
+      color: var(--muted);
+      font-size: 0.9rem;
+      letter-spacing: 0.3px;
+    }
+    .score {
+      font-weight: 700;
+      color: var(--accent-2);
+    }
+    .status {
+      margin-top: 12px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+    }
+    button {
+      background: var(--accent);
+      color: #0b1221;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    button:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(96,165,250,0.3); }
+    button:active { transform: translateY(0); }
+    .error { color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <header>
+      <div>
+        <div class="badge">Live · updates every 5 minutes</div>
+        <h1>Winter Olympics Medal Table — Custom Scoring</h1>
+      </div>
+      <div class="meta" id="scoring-meta">Gold 3 · Silver 1.5 · Bronze 1</div>
+    </header>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Nation</th>
+          <th>G</th>
+          <th>S</th>
+          <th>B</th>
+          <th>Total</th>
+          <th>Score</th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr><td colspan="7" style="text-align:center; padding:24px;">Loading…</td></tr>
+      </tbody>
+    </table>
+
+    <div class="status">
+      <div id="status-text">Waiting for data…</div>
+      <button id="refresh-btn">Refresh now</button>
+    </div>
+  </div>
+
+  <script>
+    const tbody = document.getElementById('table-body');
+    const statusText = document.getElementById('status-text');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const REFRESH_MS = 5 * 60 * 1000;
+
+    async function loadMedals(showSpinner = true) {
+      if (showSpinner) {
+        statusText.textContent = 'Refreshing…';
+      }
+      try {
+        const res = await fetch('/api/medals');
+        if (!res.ok) throw new Error('API error ' + res.status);
+        const data = await res.json();
+        renderTable(data.teams);
+        const updated = new Date(data.updatedAt);
+        statusText.textContent = `Updated ${updated.toLocaleString()} (source: ${new URL(data.source).hostname})`;
+      } catch (err) {
+        console.error(err);
+        statusText.innerHTML = `<span class="error">Failed to load medal data: ${err.message}</span>`;
+      }
+    }
+
+    function renderTable(teams) {
+      tbody.innerHTML = '';
+      teams.forEach((team, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td>
+            <div class="country">
+              <span class="code">${team.code}</span>
+              <span>${team.name}</span>
+            </div>
+          </td>
+          <td>${team.gold}</td>
+          <td>${team.silver}</td>
+          <td>${team.bronze}</td>
+          <td>${team.total}</td>
+          <td class="score">${team.score.toFixed(1)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    refreshBtn.addEventListener('click', () => loadMedals(false));
+    loadMedals();
+    setInterval(loadMedals, REFRESH_MS);
+  </script>
+</body>
+</html>
